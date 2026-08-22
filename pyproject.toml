@@ -1,0 +1,26 @@
+[project]
+name = "billing-service"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.19.1",
+    "asyncpg>=0.31.0",
+    "celery>=5.6.3",
+    "fastapi>=0.141.1",
+    "flower>=2.1.0",
+    "passlib[bcrypt]>=1.7.4",
+    "pydantic-settings>=2.15.0",
+    "python-jose[cryptography]>=3.5.0",
+    "redis>=8.1.0",
+    "sqlalchemy[asyncio]>=2.0.52",
+    "uvicorn[standard]>=0.52.4",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]

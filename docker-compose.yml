@@ -1,0 +1,85 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - .:/app
+      - venv_data:/app/.venv
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - billing-net
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: billing
+      POSTGRES_USER: billing_user
+      POSTGRES_PASSWORD: billing_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U billing_user -d billing"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - billing-net
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - billing-net
+
+  celery:
+    build: .
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    env_file: .env
+    volumes:
+      - .:/app
+      - venv_data:/app/.venv
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - billing-net
+
+  flower:
+    build: .
+    command: celery -A app.workers.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    env_file: .env
+    volumes:
+      - .:/app
+      - venv_data:/app/.venv
+    depends_on:
+      - redis
+    networks:
+      - billing-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  venv_data:
+
+networks:
+  billing-net:
+    driver: bridge
