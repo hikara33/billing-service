@@ -11,11 +11,14 @@ dependencies = [
     "fastapi>=0.141.1",
     "flower>=2.1.0",
     "passlib[bcrypt]>=1.7.4",
+    "bcrypt==4.0.1",
     "pydantic-settings>=2.15.0",
+    "pydantic[email]>=2.13.4",
     "python-jose[cryptography]>=3.5.0",
     "redis>=8.1.0",
     "sqlalchemy[asyncio]>=2.0.52",
     "uvicorn[standard]>=0.52.4",
+    "sqladmin>=0.31.0",
 ]
 
 [dependency-groups]

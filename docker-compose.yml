@@ -7,7 +7,7 @@ services:
     volumes:
       - .:/app
       - venv_data:/app/.venv
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     depends_on:
       postgres:
         condition: service_healthy
@@ -23,7 +23,7 @@ services:
       POSTGRES_USER: billing_user
       POSTGRES_PASSWORD: billing_pass
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
