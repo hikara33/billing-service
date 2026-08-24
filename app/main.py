@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.v1.auth import router as auth_router
 from app.core.config import settings
 
 @asynccontextmanager
@@ -18,6 +19,8 @@ app = FastAPI(
   docs_url="/docs",
   redoc_url="/redoc",
 )
+
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 
 @app.get("/health", tags=["system"])
 async def check_health():

@@ -20,6 +20,9 @@ class TokenPair(BaseModel):
   refresh_token: str
   token_type: Literal["bearer"] = "bearer"
 
+class AccessTokenResponse(BaseModel):
+  access_token: str
+  token_type: str = "bearer"
 
 class RefreshRequest(BaseModel):
   refresh_token: str
