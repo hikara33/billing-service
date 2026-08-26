@@ -26,16 +26,7 @@ async def transfer(
     db: AsyncSession = Depends(get_db),
     x_idempotency_key: Optional[str] = Header(default=None),
 ):
-    result = await db.execute(
-        select(Account).where(
-            Account.id == data.from_account_id,
-            Account.user_id == current_user.id,
-        )
-    )
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к счёту")
-
-    return await payment_service.transfer(data, x_idempotency_key, db)
+    return await payment_service.transfer(data, x_idempotency_key, current_user.id, db)
 
 
 @router.get("/history/{account_id}", response_model=TransactionListResponse)

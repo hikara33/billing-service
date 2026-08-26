@@ -17,16 +17,28 @@ IDEMPOTENCY_TTL = 60 * 60 * 24
 async def transfer(
     data: TransferRequest,
     idempotency_key: str | None,
+    user_id: uuid.UUID,
     db: AsyncSession,
 ) -> Transaction:
+    result = await db.execute(
+        select(Account).where(
+            Account.id == data.from_account_id,
+            Account.user_id == user_id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к счёту")
+    
     if idempotency_key:
-        cached = await redis_client.get(f"idempotency:{idempotency_key}")
+        cached = await redis_client.get(f"idempotency:{user_id}:{idempotency_key}")
         if cached:
             tx_data = json.loads(cached)
-            raise HTTPException(
-                status_code=status.HTTP_200_OK,
-                detail=tx_data,
+            result = await db.execute(
+                select(Transaction).where(
+                    Transaction.id == uuid.UUID(tx_data["transaction_id"])
+                )
             )
+            return result.scalar_one()
 
     ids = sorted([data.from_account_id, data.to_account_id])
 
@@ -77,12 +89,12 @@ async def transfer(
     await db.flush()
 
     if idempotency_key:
+        redis_key = f"idempotency:{user_id}:{idempotency_key}"
         await redis_client.setex(
-            f"idempotency:{idempotency_key}",
+            redis_key,
             IDEMPOTENCY_TTL,
-            json.dumps({"transaction_id": str(tx.id), "status": tx.status.value}),
+            json.dumps({"transaction_id": str(tx.id), "status": tx.status.value})
         )
-
     return tx
 
 
