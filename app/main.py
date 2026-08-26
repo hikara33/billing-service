@@ -3,6 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.v1.auth import router as auth_router
+from app.api.v1.accounts import router as accounts_router
+from app.api.v1.payments import router as payments_router
+
 from app.core.config import settings
 
 @asynccontextmanager
@@ -21,6 +24,8 @@ app = FastAPI(
 )
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(accounts_router, prefix="/api/v1/accounts", tags=["accounts"])
+app.include_router(payments_router, prefix="/api/v1/payments", tags=["payments"])
 
 @app.get("/health", tags=["system"])
 async def check_health():
