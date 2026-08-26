@@ -1,0 +1,121 @@
+import json
+import uuid
+from datetime import datetime, timezone
+
+from fastapi import HTTPException, status
+from sqlalchemy import select, or_, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.redis import redis_client
+from app.models import Account
+from app.models.models import Transaction, TransactionStatus, TransactionType
+from app.schemas.payments import TransferRequest, TransactionListResponse
+
+IDEMPOTENCY_TTL = 60 * 60 * 24
+
+
+async def transfer(
+    data: TransferRequest,
+    idempotency_key: str | None,
+    db: AsyncSession,
+) -> Transaction:
+    if idempotency_key:
+        cached = await redis_client.get(f"idempotency:{idempotency_key}")
+        if cached:
+            tx_data = json.loads(cached)
+            raise HTTPException(
+                status_code=status.HTTP_200_OK,
+                detail=tx_data,
+            )
+
+    ids = sorted([data.from_account_id, data.to_account_id])
+
+    result = await db.execute(
+        select(Account)
+        .where(Account.id.in_(ids))
+        .where(Account.is_active == True)
+        .order_by(Account.id)
+        .with_for_update()
+    )
+    accounts = result.scalars().all()
+
+    if len(accounts) != 2:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Один или оба счёта не найдены",
+        )
+
+    from_account = next(a for a in accounts if a.id == data.from_account_id)
+    to_account = next(a for a in accounts if a.id == data.to_account_id)
+
+    if from_account.currency != to_account.currency:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Валюты счетов должны совпадать",
+        )
+
+    if from_account.balance < data.amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Недостаточно средств",
+        )
+
+    from_account.balance -= data.amount
+    to_account.balance += data.amount
+
+    tx = Transaction(
+        from_account_id=from_account.id,
+        to_account_id=to_account.id,
+        amount=data.amount,
+        currency=from_account.currency,
+        type=TransactionType.TRANSFER,
+        status=TransactionStatus.COMPLETED,
+        idempotency_key=idempotency_key,
+        description=data.description,
+    )
+    db.add(tx)
+    await db.flush()
+
+    if idempotency_key:
+        await redis_client.setex(
+            f"idempotency:{idempotency_key}",
+            IDEMPOTENCY_TTL,
+            json.dumps({"transaction_id": str(tx.id), "status": tx.status.value}),
+        )
+
+    return tx
+
+
+async def get_history(
+    account_id: uuid.UUID,
+    db: AsyncSession,
+    page: int = 1,
+    size: int = 20,
+    status_filter: TransactionStatus | None = None,
+    type_filter: TransactionType | None = None,
+) -> TransactionListResponse:
+
+    query = select(Transaction).where(
+        or_(
+            Transaction.from_account_id == account_id,
+            Transaction.to_account_id == account_id,
+        )
+    )
+
+    if status_filter:
+        query = query.where(Transaction.status == status_filter)
+    if type_filter:
+        query = query.where(Transaction.type == type_filter)
+
+    count_result = await db.execute(
+        select(func.count()).select_from(query.subquery())
+    )
+    total = count_result.scalar_one()
+
+    query = query.order_by(Transaction.created_at.desc())
+    query = query.offset((page - 1) * size).limit(size)
+
+    result = await db.execute(query)
+    items = list(result.scalars().all())
+
+    return TransactionListResponse(items=items, total=total, page=page, size=size)
