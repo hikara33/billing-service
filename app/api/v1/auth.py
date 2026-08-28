@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.rate_limiter import check_login_rate_limit, check_register_rate_limit
 from app.models import User
 from app.schemas.auth import (
     RefreshRequest,
@@ -18,15 +19,25 @@ router = APIRouter()
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
+async def register(
+    data: UserRegister,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    await check_register_rate_limit(request.client.host)
     user = await auth_service.register_user(data, db)
     return user
 
 
 @router.post("/login", response_model=AccessTokenResponse)
-async def login(data: UserLogin, response: Response, db: AsyncSession = Depends(get_db)):
+async def login(
+    data: UserLogin,
+    response: Response,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    await check_login_rate_limit(data.email, request.client.host)
     return await auth_service.login_user(data.email, data.password, db, response)
-
 
 
 @router.post("/refresh", response_model=AccessTokenResponse)

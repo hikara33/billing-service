@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import CurrentUser
+from app.core.rate_limiter import check_transfer_rate_limit
 from app.models import Account
 from app.models.models import TransactionStatus, TransactionType
 from app.schemas.payments import (
@@ -26,6 +27,7 @@ async def transfer(
     db: AsyncSession = Depends(get_db),
     x_idempotency_key: Optional[str] = Header(default=None),
 ):
+    await check_transfer_rate_limit(str(current_user.id))
     return await payment_service.transfer(data, x_idempotency_key, current_user.id, db)
 
 
