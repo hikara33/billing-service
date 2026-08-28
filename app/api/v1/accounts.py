@@ -38,3 +38,13 @@ async def deposit(
     db: AsyncSession = Depends(get_db),
 ):
     return await account_service.deposit(account_id, data, current_user, db)
+
+
+@router.get("/{account_id}/balance")
+async def get_balance(
+    account_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    balance = await account_service.get_balance(account_id, current_user, db)
+    return {"account_id": account_id, "balance": balance}

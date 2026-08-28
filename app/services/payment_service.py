@@ -7,11 +7,33 @@ from sqlalchemy import select, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import redis_client
+from app.core.cache import invalidate_balance
 from app.models import Account
 from app.models.models import Transaction, TransactionStatus, TransactionType
 from app.schemas.payments import TransferRequest, TransactionListResponse
 
 IDEMPOTENCY_TTL = 60 * 60 * 24
+
+
+async def get_idempotent_transaction(
+    idempotency_key: str | None,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+) -> Transaction | None:
+    if not idempotency_key:
+        return None
+
+    cached = await redis_client.get(f"idempotency:{user_id}:{idempotency_key}")
+    if not cached:
+        return None
+
+    tx_data = json.loads(cached)
+    result = await db.execute(
+        select(Transaction).where(
+            Transaction.id == uuid.UUID(tx_data["transaction_id"])
+        )
+    )
+    return result.scalar_one()
 
 
 async def transfer(
@@ -28,17 +50,10 @@ async def transfer(
     )
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к счёту")
-    
-    if idempotency_key:
-        cached = await redis_client.get(f"idempotency:{user_id}:{idempotency_key}")
-        if cached:
-            tx_data = json.loads(cached)
-            result = await db.execute(
-                select(Transaction).where(
-                    Transaction.id == uuid.UUID(tx_data["transaction_id"])
-                )
-            )
-            return result.scalar_one()
+
+    existing = await get_idempotent_transaction(idempotency_key, user_id, db)
+    if existing is not None:
+        return existing
 
     ids = sorted([data.from_account_id, data.to_account_id])
 
@@ -87,6 +102,9 @@ async def transfer(
     )
     db.add(tx)
     await db.flush()
+
+    await invalidate_balance(data.from_account_id, from_account.user_id)
+    await invalidate_balance(data.to_account_id, to_account.user_id)
 
     if idempotency_key:
         redis_key = f"idempotency:{user_id}:{idempotency_key}"

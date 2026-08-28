@@ -1,3 +1,4 @@
+from decimal import Decimal
 import uuid
 
 from fastapi import HTTPException, status
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Account, User
 from app.models.models import Transaction, TransactionStatus, TransactionType
 from app.schemas.accounts import AccountCreate, DepositRequest
+from app.core.cache import get_cached_balance, set_cached_balance, invalidate_balance
 
 
 async def create_account(user: User, data: AccountCreate, db: AsyncSession) -> Account:
@@ -27,6 +29,25 @@ async def get_user_accounts(user: User, db: AsyncSession) -> list[Account]:
         .where(Account.is_active == True) 
     )
     return list(result.scalars().all())
+
+
+async def get_balance(account_id: uuid.UUID, user: User, db: AsyncSession) -> Decimal:
+    cached = await get_cached_balance(account_id, user.id)
+    if cached is not None:
+        return cached
+
+    result = await db.execute(
+        select(Account.balance)
+        .where(Account.id == account_id)
+        .where(Account.user_id == user.id)
+        .where(Account.is_active == True)
+    )
+    balance = result.scalar_one_or_none()
+    if balance is None:
+        raise HTTPException(status_code=404, detail="Счет не найден")
+
+    await set_cached_balance(account_id, user.id, balance)
+    return balance
 
 
 async def deposit(
@@ -61,4 +82,5 @@ async def deposit(
     )
     db.add(tx)
     await db.flush()
+    await invalidate_balance(account_id, account.user_id)
     return tx

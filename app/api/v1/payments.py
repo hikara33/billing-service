@@ -27,6 +27,12 @@ async def transfer(
     db: AsyncSession = Depends(get_db),
     x_idempotency_key: Optional[str] = Header(default=None),
 ):
+    existing = await payment_service.get_idempotent_transaction(
+        x_idempotency_key, current_user.id, db
+    )
+    if existing is not None:
+        return existing
+
     await check_transfer_rate_limit(str(current_user.id))
     return await payment_service.transfer(data, x_idempotency_key, current_user.id, db)
 
