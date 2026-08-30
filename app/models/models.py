@@ -28,6 +28,22 @@ class TransactionType(str, enum.Enum):
   WITHDRAWAL = "withdrawal"
   TRANSFER = "transfer"
 
+class PlanInterval(str, enum.Enum):
+  MONTHLY = "monthly"
+  YEARLY = "yearly"
+
+class SubscriptionStatus(str, enum.Enum):
+  ACTIVE = "active"
+  SUSPENDED = "suspended"
+  CANCELLED = "cancelled"
+  EXPIRED = "expired"
+
+class InvoiceStatus(str, enum.Enum):
+  PENDING = "pending"
+  PAID = "paid"
+  FAILED = "failed"
+  CANCELLED = "cancelled"
+
 
 class User(Base):
   __tablename__ = "users"
@@ -45,6 +61,7 @@ class User(Base):
 
   accounts: Mapped[list["Account"]] = relationship(back_populates="owner")
   refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user")
+  subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="user")
 
 
 class RefreshToken(Base):
@@ -99,6 +116,7 @@ class Account(Base):
     back_populates="to_account",
     foreign_keys="Transaction.to_account_id",
   )
+  subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="account")
   
   __table_args__ = (
     Index("ix_accounts_user_id", "user_id"),
@@ -145,4 +163,94 @@ class Transaction(Base):
     Index("ix_transactions_from_account", "from_account_id"),
     Index("ix_transactions_to_account", "to_account_id"),
     Index("ix_transactions_created_at", "created_at"),
+  )
+
+
+class Plan(Base):
+  __tablename__ = "plans"
+
+  id: Mapped[uuid.UUID] = mapped_column(
+    UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+  )
+  name: Mapped[str] = mapped_column(String(100), nullable=False)
+  description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+  price: Mapped[float] = mapped_column(Numeric(19, 4), nullable=False)
+  currency: Mapped[str] = mapped_column(String(3), default="RUB", nullable=False)
+  interval: Mapped[PlanInterval] = mapped_column(Enum(PlanInterval), nullable=False)
+  is_active: Mapped[bool] = mapped_column(default=True)
+  created_at: Mapped[datetime] = mapped_column(
+    DateTime(timezone=True), server_default=func.now()
+  )
+
+  subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="plan")
+
+
+class Subscription(Base):
+  __tablename__ = "subscriptions"
+
+  id: Mapped[uuid.UUID] = mapped_column(
+    UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+  )
+  user_id: Mapped[uuid.UUID] = mapped_column(
+    UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+  )
+  plan_id: Mapped[uuid.UUID] = mapped_column(
+    UUID(as_uuid=True), ForeignKey("plans.id"), nullable=False
+  )
+
+  account_id: Mapped[uuid.UUID] = mapped_column(
+    UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False
+  )
+
+  status: Mapped[SubscriptionStatus] = mapped_column(
+    Enum(SubscriptionStatus), default=SubscriptionStatus.ACTIVE, nullable=False
+  )
+  started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+  next_billing_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+  cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+  created_at: Mapped[datetime] = mapped_column(
+    DateTime(timezone=True), server_default=func.now()
+  )
+
+  user: Mapped["User"] = relationship(back_populates="subscriptions")
+  plan: Mapped["Plan"] = relationship(back_populates="subscriptions")
+  account: Mapped["Account"] = relationship(back_populates="subscriptions")
+  invoices: Mapped[list["Invoice"]] = relationship(back_populates="subscription")
+
+  __table_args__ = (
+    Index("ix_subscriptions_user_id", "user_id"),
+    Index("ix_subscriptions_next_billing_date", "next_billing_date"),
+  )
+
+
+class Invoice(Base):
+  __tablename__ = "invoices"
+
+  id: Mapped[uuid.UUID] = mapped_column(
+    UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+  )
+  subscription_id: Mapped[uuid.UUID] = mapped_column(
+    UUID(as_uuid=True), ForeignKey("subscriptions.id", ondelete="CASCADE"), nullable=False
+  )
+  amount: Mapped[float] = mapped_column(Numeric(19, 4), nullable=False)
+  currency: Mapped[str] = mapped_column(String(3), default="RUB", nullable=False)
+  status: Mapped[InvoiceStatus] = mapped_column(
+    Enum(InvoiceStatus), default=InvoiceStatus.PENDING, nullable=False
+  )
+
+  #если оплачен
+  transaction_id: Mapped[uuid.UUID | None] = mapped_column(
+    UUID(as_uuid=True), ForeignKey("transactions.id"), nullable=True
+  )
+  due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+  paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+  created_at: Mapped[datetime] = mapped_column(
+    DateTime(timezone=True), server_default=func.now()
+  )
+
+  subscription: Mapped["Subscription"] = relationship(back_populates="invoices")
+
+  __table_args__ = (
+    Index("ix_invoices_subscription_id", "subscription_id"),
+    Index("ix_invoices_status", "status"),
   )
