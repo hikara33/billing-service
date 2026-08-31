@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import CurrentUser
-from app.schemas.accounts import AccountCreate, AccountResponse, DepositRequest
+from app.schemas.accounts import AccountCreate, AccountResponse, DepositRequest, BalanceResponse
 from app.schemas.payments import TransactionResponse
 from app.services import account_service
 
@@ -40,11 +40,10 @@ async def deposit(
     return await account_service.deposit(account_id, data, current_user, db)
 
 
-@router.get("/{account_id}/balance")
+@router.get("/{account_id}/balance", response_model=BalanceResponse)
 async def get_balance(
     account_id: uuid.UUID,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    balance = await account_service.get_balance(account_id, current_user, db)
-    return {"account_id": account_id, "balance": balance}
+    return await account_service.get_balance(account_id, current_user, db)
