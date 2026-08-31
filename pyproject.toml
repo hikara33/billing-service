@@ -19,6 +19,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.52",
     "uvicorn[standard]>=0.52.4",
     "sqladmin>=0.31.0",
+    "python-dateutil>=2.9.0.post0",
 ]
 
 [dependency-groups]

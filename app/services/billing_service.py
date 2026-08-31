@@ -7,6 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from dateutil.relativedelta import relativedelta
+
 from app.models import Account, User
 from app.models.models import (
     Invoice,
@@ -23,11 +25,8 @@ from app.schemas.billing import SubscribeRequest
 
 def _next_billing_date(interval: str, from_date: datetime) -> datetime:
     if interval == "monthly":
-        month = from_date.month + 1
-        year = from_date.year + month // 13
-        month = month if month <= 12 else 1
-        return from_date.replace(year=year, month=month)
-    return from_date.replace(year=from_date.year + 1)
+        return from_date + relativedelta(months=1)
+    return from_date + relativedelta(years=1)
 
 
 async def _get_plan(plan_id: uuid.UUID, db: AsyncSession) -> Plan:
@@ -93,7 +92,7 @@ async def subscribe(data: SubscribeRequest, user: User, db: AsyncSession) -> Sub
     await db.flush()
 
     await _charge_subscription(subscription, plan, account, db)
-    
+
     return await db.scalar(
         select(Subscription)
         .where(Subscription.id == subscription.id)
