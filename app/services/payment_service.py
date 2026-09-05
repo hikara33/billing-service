@@ -33,7 +33,7 @@ async def get_idempotent_transaction(
             Transaction.id == uuid.UUID(tx_data["transaction_id"])
         )
     )
-    return result.scalar_one()
+    return result.scalar_one_or_none()
 
 
 async def transfer(
