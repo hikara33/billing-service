@@ -25,7 +25,11 @@ celery_app.conf.beat_schedule = {
     "schedule": crontab(hour=0, minute=0)
   },
   "cleanup-expired-tokens-daily": {
-    "task": "app.workers.tasks.cleanup_expired_token",
-    "shedule": crontab(hour=3, minute=0)
+    "task": "app.workers.tasks.cleanup_expired_tokens",
+    "schedule": crontab(hour=3, minute=0)
+  },
+  "process-billing-test": {
+    "task": "app.workers.tasks.process_billing",
+    "schedule": crontab(minute="*/1")
   }
 }
