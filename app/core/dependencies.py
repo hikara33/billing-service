@@ -10,6 +10,7 @@ from typing import Annotated
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models import User
+from app.models.models import UserRole
 
 bearer_scheme = HTTPBearer()
 
@@ -38,3 +39,11 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def require_roles(*roles: UserRole):
+  async def _check(current_user: CurrentUser) -> User:
+    if current_user.role not in roles:
+      raise HTTPException(status_code=403, detail="Недостаточно прав")
+    return current_user
+  return _check
