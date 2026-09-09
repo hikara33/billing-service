@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    yookassa_shop_id: str
+    yookassa_secret_key: str
+    yookassa_return_url: str
+
     APP_ENV: str = "development"
     DEBUG: bool = True
 
