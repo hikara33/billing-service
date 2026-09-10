@@ -32,10 +32,6 @@ class AccountResponse(BaseModel):
   model_config = {"from_attributes": True}
 
 
-class DepositRequest(BaseModel):
-  amount: Decimal = Field(gt=0, le=1_000_000)
-
-
 class BalanceResponse(BaseModel):
   account_id: uuid.UUID
   balance: Decimal
