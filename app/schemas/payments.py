@@ -41,3 +41,9 @@ class TransactionListResponse(BaseModel):
   total: int
   page: int
   size: int
+
+
+class DepositRequest(BaseModel):
+  amount: Decimal = Field(gt=0, le=1_000_000)
+  currency: str
+  account_id: uuid.UUID

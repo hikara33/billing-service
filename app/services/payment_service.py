@@ -9,8 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.redis import redis_client
 from app.core.cache import invalidate_balance
 from app.models import Account
-from app.models.models import Transaction, TransactionStatus, TransactionType
-from app.schemas.payments import TransferRequest, TransactionListResponse
+from app.models.models import Transaction, TransactionStatus, TransactionType, Payment, PaymentStatus, PaymentProvider, User
+from app.schemas.payments import TransferRequest, TransactionListResponse, DepositRequest
+from app.integrations.yookassa.client import yookassa_client
+from app.integrations.yookassa.schemas import YookassaWebhookPayload
+
+from app.core.config import settings
 
 IDEMPOTENCY_TTL = 60 * 60 * 24
 
@@ -114,6 +118,93 @@ async def transfer(
             json.dumps({"transaction_id": str(tx.id), "status": tx.status.value})
         )
     return tx
+
+
+async def deposit(
+        data: DepositRequest,
+        user: User,
+        db: AsyncSession
+) -> dict:
+    account = await db.scalar(
+        select(Account).where(
+            Account.id == data.account_id,
+            Account.user_id == user.id,
+            Account.is_active == True
+        )
+    )
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    yookassa_payment = yookassa_client.create_payment(
+        amount=data.amount,
+        currency=data.currency,
+        description=f"Пополнение счёта",
+        return_url=settings.yookassa_return_url,
+        metadata={
+            "account_id": str(account.id),
+            "user_id": str(user.id),
+        }
+    )
+
+    payment = Payment(
+        account_id=account.id,
+        provider=PaymentProvider.YOOKASSA,
+        provider_payment_id=yookassa_payment.id,
+        amount=data.amount,
+        currency=data.currency,
+        status=PaymentStatus.PENDING,
+    )
+    db.add(payment)
+    await db.flush()
+
+    return {
+        "payment_id": str(payment.id),
+        "confirmation_url": yookassa_payment.confirmation.confirmation_url,
+        "amount": data.amount,
+        "status": payment.status,
+    }
+
+
+async def handle_yookassa_webhook(
+        payload: YookassaWebhookPayload,
+        db: AsyncSession
+):
+    if payload.event != "payment.succeeded":
+        return
+
+    payment = await db.scalar(
+        select(Payment).where(
+            Payment.provider_payment_id == payload.object.id,
+            Payment.status == PaymentStatus.PENDING
+        )
+    )
+    if not payment:
+        return
+
+    account = await db.scalar(
+        select(Account)
+        .where(Account.id == payment.account_id)
+        .with_for_update()
+    )
+    if not account:
+        return
+
+    account.balance+= payment.amount
+
+    tx = Transaction(
+        to_account_id=account.id,
+        amount=payment.amount,
+        currency=payment.currency,
+        type=TransactionType.DEPOSIT,
+        status=TransactionStatus.COMPLETED,
+        description=f"Пополнение через ЮKassa: {payload.object.id}",
+    )
+    db.add(tx)
+
+    payment.status = PaymentStatus.SUCCEEDED
+    await db.flush()
+
+    await invalidate_balance(account.id, account.user_id)
 
 
 async def get_history(

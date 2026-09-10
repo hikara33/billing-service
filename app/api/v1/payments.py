@@ -13,6 +13,7 @@ from app.schemas.payments import (
     TransactionListResponse,
     TransactionResponse,
     TransferRequest,
+    DepositRequest,
 )
 from app.services import payment_service
 import uuid
@@ -35,6 +36,20 @@ async def transfer(
 
     await check_transfer_rate_limit(str(current_user.id))
     return await payment_service.transfer(data, x_idempotency_key, current_user.id, db)
+
+
+@router.post("/deposit")
+async def deposit(
+        data: DepositRequest,
+        current_user: CurrentUser,
+        db: AsyncSession = Depends(get_db),
+):
+    return await payment_service.deposit(data, current_user, db)
+
+
+@router.get("/success")
+async def payment_success():
+    return { "message": "Оплата прошла. Баланс пополнится в течение нескольких секунд" }
 
 
 @router.get("/history/{account_id}", response_model=TransactionListResponse)

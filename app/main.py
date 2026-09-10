@@ -7,6 +7,7 @@ from app.api.v1.accounts import router as accounts_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.billing import router as billing_router
 from app.api.v1.admin import router as admin_router
+from app.api.v1.webhooks.yookassa import router as yookassa_webhook_router
 
 from app.core.config import settings
 
@@ -30,6 +31,7 @@ app.include_router(accounts_router, prefix="/api/v1/accounts", tags=["accounts"]
 app.include_router(payments_router, prefix="/api/v1/payments", tags=["payments"])
 app.include_router(billing_router, prefix="/api/v1/billing", tags=["billing"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
+app.include_router(yookassa_webhook_router, prefix="/api/v1/webhooks/yookassa", tags=["webhooks"])
 
 @app.get("/health", tags=["system"])
 async def check_health():
