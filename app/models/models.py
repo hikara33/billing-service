@@ -34,6 +34,7 @@ class PlanInterval(str, enum.Enum):
   YEARLY = "yearly"
 
 class SubscriptionStatus(str, enum.Enum):
+  PENDING = "pending"
   ACTIVE = "active"
   SUSPENDED = "suspended"
   CANCELLED = "cancelled"
@@ -244,6 +245,7 @@ class Subscription(Base):
   plan: Mapped["Plan"] = relationship(back_populates="subscriptions")
   account: Mapped["Account"] = relationship(back_populates="subscriptions")
   invoices: Mapped[list["Invoice"]] = relationship(back_populates="subscription")
+  payments: Mapped[list["Payment"]] = relationship(back_populates="subscription")
 
   __table_args__ = (
     Index("ix_subscriptions_user_id", "user_id"),
@@ -297,6 +299,9 @@ class Payment(Base):
     invoice_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    subscription_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("subscriptions.id", ondelete="SET NULL"), nullable=False, index=True
+    )
 
     provider: Mapped[PaymentProvider] = mapped_column(Enum(PaymentProvider), nullable=False)
     provider_payment_id: Mapped[str] = mapped_column(
@@ -312,4 +317,5 @@ class Payment(Base):
 
     account: Mapped["Account"] = relationship(back_populates="payments")
     invoice: Mapped["Invoice | None"] = relationship(back_populates="payments")
+    subscription: Mapped["Subscription | None"] = relationship(back_populates="payments")
     transaction: Mapped["Transaction | None"] = relationship(back_populates="payment")

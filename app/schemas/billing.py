@@ -46,3 +46,12 @@ class InvoiceResponse(BaseModel):
   created_at: datetime
 
   model_config = { "from_attributes": True }
+
+
+class SubscribeResponse(BaseModel):
+    subscription_id: uuid.UUID
+    confirmation_url: str
+    amount: Decimal
+    plan: PlanResponse
+
+    model_config = { "from_attributes": True }
