@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
@@ -15,6 +16,18 @@ engine = create_async_engine(
 
 AsyncSessionFactory = async_sessionmaker(
   engine,
+  expire_on_commit=False,
+  class_=AsyncSession,
+)
+
+task_engine = create_async_engine(
+  settings.database_url,
+  echo=settings.DEBUG,
+  poolclass=NullPool,
+)
+
+TaskSessionFactory = async_sessionmaker(
+  task_engine,
   expire_on_commit=False,
   class_=AsyncSession,
 )
