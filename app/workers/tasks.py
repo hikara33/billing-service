@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import delete, select
 
-from app.core.database import AsyncSessionFactory
+from app.core.database import TaskSessionFactory
 from app.models.models import RefreshToken
 from app.workers.celery_app import celery_app
 
@@ -25,7 +25,7 @@ def process_billing(self):
   logger.info("starting process billing")
 
   async def _run():
-    async with AsyncSessionFactory() as db:
+    async with TaskSessionFactory() as db:
       try:
         from app.services.billing_service import process_due_subscriptions
         result = await process_due_subscriptions(db)
@@ -47,7 +47,7 @@ def cleanup_expired_tokens():
   logger.info("cleaning up expired refresh tokens")
 
   async def _run():
-    async with AsyncSessionFactory() as db:
+    async with TaskSessionFactory() as db:
       try:
         now = datetime.now(timezone.utc)
         await db.execute(

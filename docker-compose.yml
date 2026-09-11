@@ -1,4 +1,18 @@
 services:
+  migrate:
+    build: .
+    command: alembic upgrade head
+    env_file: .env
+    volumes:
+      - .:/app
+      - venv_data:/app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - billing-net
+
   app:
     build: .
     ports:
@@ -7,8 +21,10 @@ services:
     volumes:
       - .:/app
       - venv_data:/app/.venv
-    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -58,6 +74,7 @@ services:
     depends_on:
       - redis 
       - postgres
+      - migrate
     networks:
       - billing-net
 
