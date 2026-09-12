@@ -10,6 +10,7 @@ from app.schemas.billing import (
     PlanResponse,
     SubscribeRequest,
     SubscriptionResponse,
+    SubscribeResponse
 )
 from app.services import billing_service
 
@@ -21,7 +22,7 @@ async def get_plans(db: AsyncSession = Depends(get_db)):
     return await billing_service.get_plans(db)
 
 
-@router.post("/subscribe", response_model=SubscriptionResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/subscribe", response_model=SubscribeResponse, status_code=status.HTTP_201_CREATED)
 async def subscribe(
     data: SubscribeRequest,
     current_user: CurrentUser,

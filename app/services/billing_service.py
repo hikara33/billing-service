@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from app.core.config import settings
 
 from dateutil.relativedelta import relativedelta
 
@@ -19,8 +20,12 @@ from app.models.models import (
     Transaction,
     TransactionStatus,
     TransactionType,
+    Payment,
+    PaymentProvider,
+    PaymentStatus
 )
 from app.schemas.billing import SubscribeRequest
+from app.integrations.yookassa.client import yookassa_client
 
 
 def _next_billing_date(interval: str, from_date: datetime) -> datetime:
@@ -69,7 +74,7 @@ async def get_plans(db: AsyncSession) -> list[Plan]:
     return list(plans.all())
 
 
-async def subscribe(data: SubscribeRequest, user: User, db: AsyncSession) -> Subscription:
+async def subscribe(data: SubscribeRequest, user: User, db: AsyncSession) -> dict:
     plan = await _get_plan(data.plan_id, db)
     account = await _get_account(data.account_id, user.id, db)
 
@@ -80,24 +85,50 @@ async def subscribe(data: SubscribeRequest, user: User, db: AsyncSession) -> Sub
         )
 
     now = datetime.now(timezone.utc)
+
     subscription = Subscription(
         user_id=user.id,
         plan_id=plan.id,
         account_id=account.id,
-        status=SubscriptionStatus.ACTIVE,
+        status=SubscriptionStatus.PENDING,
         started_at=now,
         next_billing_date=_next_billing_date(plan.interval.value, now),
     )
     db.add(subscription)
     await db.flush()
 
-    await _charge_subscription(subscription, plan, account, db)
-
-    return await db.scalar(
-        select(Subscription)
-        .where(Subscription.id == subscription.id)
-        .options(selectinload(Subscription.plan))
+    yookassa_payment = yookassa_client.create_payment(
+        amount=Decimal(str(plan.price)),
+        currency=plan.currency,
+        description=f"Подписка на тариф {plan.name}",
+        return_url=settings.yookassa_return_url,
+        metadata={
+            "subscription_id": str(subscription.id),
+            "user_id": str(user.id),
+            "type": "subscription",
+        },
     )
+
+    payment = Payment(
+        account_id=account.id,
+        subscription_id=subscription.id,
+        provider=PaymentProvider.YOOKASSA,
+        provider_payment_id=yookassa_payment.id,
+        amount=plan.price,
+        currency=plan.currency,
+        status=PaymentStatus.PENDING,
+    )
+    db.add(payment)
+    await db.flush()
+
+    return {
+        "payment_id": str(payment.id),
+        "confirmation_url": yookassa_payment.confirmation.confirmation_url,
+        "amount": plan.price,
+        "plan": plan,
+        "status": payment.status,
+        "type": "subscription"
+    }
 
 
 async def cancel_subscription(
