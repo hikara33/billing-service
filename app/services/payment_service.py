@@ -1,6 +1,5 @@
 import json
 import uuid
-from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import select, or_, func
@@ -12,7 +11,6 @@ from app.models import Account
 from app.models.models import Transaction, TransactionStatus, TransactionType, Payment, PaymentStatus, PaymentProvider, User
 from app.schemas.payments import TransferRequest, TransactionListResponse, DepositRequest
 from app.integrations.yookassa.client import yookassa_client
-from app.integrations.yookassa.schemas import YookassaWebhookPayload
 
 from app.core.config import settings
 
@@ -163,48 +161,6 @@ async def deposit(
         "amount": data.amount,
         "status": payment.status,
     }
-
-
-async def handle_yookassa_webhook(
-        payload: YookassaWebhookPayload,
-        db: AsyncSession
-):
-    if payload.event != "payment.succeeded":
-        return
-
-    payment = await db.scalar(
-        select(Payment).where(
-            Payment.provider_payment_id == payload.object.id,
-            Payment.status == PaymentStatus.PENDING
-        )
-    )
-    if not payment:
-        return
-
-    account = await db.scalar(
-        select(Account)
-        .where(Account.id == payment.account_id)
-        .with_for_update()
-    )
-    if not account:
-        return
-
-    account.balance+= payment.amount
-
-    tx = Transaction(
-        to_account_id=account.id,
-        amount=payment.amount,
-        currency=payment.currency,
-        type=TransactionType.DEPOSIT,
-        status=TransactionStatus.COMPLETED,
-        description=f"Пополнение через ЮKassa: {payload.object.id}",
-    )
-    db.add(tx)
-
-    payment.status = PaymentStatus.SUCCEEDED
-    await db.flush()
-
-    await invalidate_balance(account.id, account.user_id)
 
 
 async def get_history(
