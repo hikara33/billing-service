@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: billing
+          POSTGRES_USER: billing_user
+          POSTGRES_PASSWORD: billing_pass
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U billing_user -d billing"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Create test environment
+        run: |
+          cat > .env.test << 'EOF'
+          POSTGRES_HOST=localhost
+          POSTGRES_PORT=5433
+          POSTGRES_DB=billing
+          POSTGRES_USER=billing_user
+          POSTGRES_PASSWORD=billing_pass
+
+          REDIS_HOST=localhost
+          REDIS_PORT=6379
+          REDIS_DB=1
+
+          SECRET_KEY=test-secret-key-for-ci
+          ALGORITHM=HS256
+          ACCESS_TOKEN_EXPIRE_MINUTES=30
+          REFRESH_TOKEN_EXPIRE_DAYS=7
+
+          yookassa_shop_id=test
+          yookassa_secret_key=test
+          yookassa_return_url=http://localhost:8000/api/v1/payments/success
+
+          APP_ENV=test
+          DEBUG=false
+          EOF
+
+      - name: Run migrations
+        run: uv run alembic upgrade head
+
+      - name: Run tests
+        run: uv run pytest tests/ -v --tb=short
