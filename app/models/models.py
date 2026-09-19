@@ -268,10 +268,6 @@ class Invoice(Base):
     Enum(InvoiceStatus), default=InvoiceStatus.PENDING, nullable=False
   )
 
-  #если оплачен
-  transaction_id: Mapped[uuid.UUID | None] = mapped_column(
-    UUID(as_uuid=True), ForeignKey("transactions.id"), nullable=True
-  )
   due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
   paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
   created_at: Mapped[datetime] = mapped_column(
@@ -299,8 +295,11 @@ class Payment(Base):
     invoice_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    subscription_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("subscriptions.id", ondelete="SET NULL"), nullable=False, index=True
+    subscription_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subscriptions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
 
     provider: Mapped[PaymentProvider] = mapped_column(Enum(PaymentProvider), nullable=False)

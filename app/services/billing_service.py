@@ -233,7 +233,6 @@ async def _charge_subscription(
     await db.flush()
 
     invoice.status = InvoiceStatus.PAID
-    invoice.transaction_id = tx.id
     invoice.paid_at = now
     await db.flush()
     return invoice
