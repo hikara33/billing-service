@@ -9,17 +9,9 @@ from app.models.models import TransactionStatus, TransactionType
 
 class TransferRequest(BaseModel):
   from_account_id: uuid.UUID
-  to_account_id: uuid.UUID
+  to_account_number: str
   amount: Decimal = Field(gt=0)
   description: str | None = Field(default=None, max_length=500)
-
-  @field_validator("to_account_id")
-  @classmethod
-  def accounts_must_differ(cls, value: uuid.UUID, info) -> uuid.UUID:
-    if value == info.data.get("from_account_id"):
-      raise ValueError("Нельзя переводить на тот же счёт")
-
-    return value
 
 
 class TransactionResponse(BaseModel):

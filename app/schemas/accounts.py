@@ -24,6 +24,7 @@ class AccountCreate(BaseModel):
 class AccountResponse(BaseModel):
   id: uuid.UUID
   user_id: uuid.UUID
+  account_number: str
   balance: Decimal
   currency: Currency
   is_active: bool

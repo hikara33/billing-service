@@ -44,50 +44,49 @@ async def transfer(
     user_id: uuid.UUID,
     db: AsyncSession,
 ) -> Transaction:
-    result = await db.execute(
+    from_account_check = await db.scalar(
         select(Account).where(
             Account.id == data.from_account_id,
             Account.user_id == user_id,
         )
     )
-    if not result.scalar_one_or_none():
+    if not from_account_check:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к счёту")
 
     existing = await get_idempotent_transaction(idempotency_key, user_id, db)
     if existing is not None:
         return existing
 
-    ids = sorted([data.from_account_id, data.to_account_id])
+    to_account_check = await db.scalar(
+        select(Account).where(Account.account_number == data.to_account_number)
+    )
+    if not to_account_check:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Счёт получателя не найден")
 
+    if from_account_check.id == to_account_check.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нельзя переводить на тот же счёт")
+
+    ids = sorted([from_account_check.id, to_account_check.id])
     result = await db.execute(
         select(Account)
         .where(Account.id.in_(ids))
-        .where(Account.is_active == True)
+        .where(Account.is_active == True)  # noqa: E712
         .order_by(Account.id)
         .with_for_update()
     )
     accounts = result.scalars().all()
 
     if len(accounts) != 2:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Один или оба счёта не найдены",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Один или оба счёта не активны")
 
-    from_account = next(a for a in accounts if a.id == data.from_account_id)
-    to_account = next(a for a in accounts if a.id == data.to_account_id)
+    from_account = next(a for a in accounts if a.id == from_account_check.id)
+    to_account = next(a for a in accounts if a.id == to_account_check.id)
 
     if from_account.currency != to_account.currency:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Валюты счетов должны совпадать",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Валюты счетов должны совпадать")
 
     if from_account.balance < data.amount:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Недостаточно средств",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Недостаточно средств")
 
     from_account.balance -= data.amount
     to_account.balance += data.amount
@@ -105,16 +104,16 @@ async def transfer(
     db.add(tx)
     await db.flush()
 
-    await invalidate_balance(data.from_account_id, from_account.user_id)
-    await invalidate_balance(data.to_account_id, to_account.user_id)
+    await invalidate_balance(from_account.id, from_account.user_id)
+    await invalidate_balance(to_account.id, to_account.user_id)
 
     if idempotency_key:
-        redis_key = f"idempotency:{user_id}:{idempotency_key}"
-        await redis_client.setex(
-            redis_key,
-            IDEMPOTENCY_TTL,
-            json.dumps({"transaction_id": str(tx.id), "status": tx.status.value})
+        await redis_client.set(
+            f"idempotency:{user_id}:{idempotency_key}",
+            json.dumps({"transaction_id": str(tx.id), "status": tx.status.value}),
+            ex=IDEMPOTENCY_TTL,
         )
+
     return tx
 
 

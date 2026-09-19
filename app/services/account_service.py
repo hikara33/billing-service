@@ -1,4 +1,5 @@
 from decimal import Decimal
+from random import randint
 import uuid
 
 from fastapi import HTTPException, status
@@ -6,15 +7,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Account, User
-from app.models.models import Transaction, TransactionStatus, TransactionType
 from app.schemas.accounts import AccountCreate, BalanceResponse
-from app.core.cache import get_cached_balance, set_cached_balance, invalidate_balance
+from app.core.cache import get_cached_balance, set_cached_balance
+
+
+def _generate_account_number() -> str:
+    return f"40817810{randint(10**9, 10**10 - 1)}"
 
 
 async def create_account(user: User, data: AccountCreate, db: AsyncSession) -> Account:
     account = Account(
         user_id=user.id,
         currency=data.currency,
+        account_number=_generate_account_number(),
         balance=0,
     )
     db.add(account)

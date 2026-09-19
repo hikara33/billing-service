@@ -122,6 +122,9 @@ class Account(Base):
     UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
   )
 
+  account_number: Mapped[str] = mapped_column(
+    String(20), unique=True, nullable=False, index=True
+  )
   balance: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0, nullable=False)
   currency: Mapped[str] = mapped_column(String(3), default="RUB", nullable=False)
   is_active: Mapped[bool] = mapped_column(default=True)
