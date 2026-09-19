@@ -18,10 +18,10 @@ async def get_cached_balance(account_id: uuid.UUID, user_id: uuid.UUID) -> dict 
 
 
 async def set_cached_balance(account_id: uuid.UUID, user_id: uuid.UUID, balance: Decimal, currency: str) -> None:
-  await redis_client.setex(
+  await redis_client.set(
     _balance_key(account_id, user_id),
-    BALANCE_TTL,
-    json.dumps({ "balance": str(balance), "currency": currency })
+    json.dumps({"balance": str(balance), "currency": currency}),
+    BALANCE_TTL
   )
 
 
